@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RE·CORDAR · Facultad Ash-Ka · Tania Navarro</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -2000,7 +2001,18 @@ ESCUELA   -->
         </div>
       </div>
 
+      <!-- RESEAS DESDE SUPABASE -->
+      <div style="font-size:9px;letter-spacing:0.25em;text-transform:uppercase;color:#C9A96E;font-weight:600;margin-bottom:16px;border-bottom:0.5px solid rgba(201,169,110,0.2);padding-bottom:10px;">Reseñas de la comunidad</div>
+      <div id="resenas-supabase" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:40px;">
+        <div style="opacity:0.5;font-size:13px;font-style:italic;">Cargando reseñas...</div>
+      </div>
+
       <!-- FORMULARIO -->
+
+      <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(201,169,110,0.85);font-weight:500;margin-bottom:8px;">Tu puntuación</div>
+      <div id="star-rating" style="margin-bottom:18px;font-size:26px;letter-spacing:6px;color:#F0C060;cursor:pointer;user-select:none;">
+        <span class="star-btn" onclick="setStars(1)">★</span><span class="star-btn" onclick="setStars(2)">★</span><span class="star-btn" onclick="setStars(3)">★</span><span class="star-btn" onclick="setStars(4)">★</span><span class="star-btn" onclick="setStars(5)">★</span>
+      </div>
 
       <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(201,169,110,0.85);font-weight:500;margin-bottom:8px;">Tu nombre</div>
             <input id="r-nombre" type="text" placeholder="Cómo quieres que te identifiquemos"
@@ -2039,7 +2051,7 @@ ESCUELA   -->
 
           <!--  BOTONES  -->
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button onclick="enviarResena()" style="flex:1;background:var(--gold);color:var(--deep);font-family:'Roboto',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:14px 24px;border:none;cursor:pointer;border-radius:2px;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+            <button id="btn-enviar-resena" onclick="enviarResena()" style="flex:1;background:var(--gold);color:var(--deep);font-family:'Roboto',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:14px 24px;border:none;cursor:pointer;border-radius:2px;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
               Publicar mi reseña
             </button>
             <button onclick="enviarWhatsApp()" style="display:none;flex:1;background:rgba(37,211,102,0.15);color:#5CD68A;border:0.5px solid rgba(37,211,102,0.3);font-family:'Roboto',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;padding:13px 24px;cursor:pointer;border-radius:2px;transition:all 0.2s;" onmouseover="this.style.background='rgba(37,211,102,0.25)'" onmouseout="this.style.background='rgba(37,211,102,0.15)'">
@@ -2295,12 +2307,92 @@ ESCUELA   -->
     }
   }
 
-  function enviarResena() {
+  // --------------------
+  // SUPABASE - RESENAS
+  // --------------------
+  var SUPABASE_URL = 'https://ubzhbosyfrqeqdhmpuud.supabase.co';
+  var SUPABASE_ANON_KEY = 'sb_publishable_tzYazLX5sGjJCJWQFBY18w_FRcXgMqf';
+  var supabaseClient = (typeof supabase !== 'undefined')
+    ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function(c) {
+      return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+    });
+  }
+
+  async function cargarResenas() {
+    var cont = document.getElementById('resenas-supabase');
+    if (!cont || !supabaseClient) return;
+    var res = await supabaseClient
+      .from('reseñas')
+      .select('nombre, comentario, puntuacion, curso, created_at')
+      .order('created_at', { ascending: false });
+    var data = res.data, error = res.error;
+    if (error) {
+      console.error('Error cargando resenas:', error);
+      cont.innerHTML = '<div style="opacity:0.5;font-size:13px;font-style:italic;">No se pudieron cargar las reseñas.</div>';
+      return;
+    }
+    if (!data || !data.length) {
+      cont.innerHTML = '<div style="opacity:0.5;font-size:13px;font-style:italic;">Se el primero en dejar tu reseña.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < data.length; i++) {
+      var r = data[i];
+      var puntos = Math.min(5, Math.max(0, parseInt(r.puntuacion, 10) || 5));
+      var estrellas = Array(puntos + 1).join('★') + Array(6 - puntos).join('☆');
+      var inicial = (r.nombre || '?').trim().charAt(0).toUpperCase() || '?';
+      var cursoHtml = r.curso ? '<div style="font-size:10px;color:rgba(201,169,110,0.6);text-transform:uppercase;letter-spacing:0.08em;">' + escapeHtml(r.curso) + '</div>' : '';
+      html += '<div style="background:rgba(201,169,110,0.05);border:0.5px solid rgba(201,169,110,0.15);padding:24px;">'
+        + '<div style="color:#F0C060;font-size:12px;margin-bottom:10px;">' + estrellas + '</div>'
+        + '<div style="font-family:\'Roboto\',sans-serif;font-size:14px;font-style:italic;color:rgba(248,245,235,0.9);line-height:1.75;margin-bottom:16px;">"' + escapeHtml(r.comentario) + '"</div>'
+        + '<div style="display:flex;align-items:center;gap:10px;">'
+        + '<div style="width:32px;height:32px;border-radius:50%;background:rgba(201,169,110,0.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:#F0C060;font-family:\'Playfair Display\',serif;font-weight:700;flex-shrink:0;">' + escapeHtml(inicial) + '</div>'
+        + '<div><div style="font-size:12px;font-weight:600;color:#F8F0D8;">' + escapeHtml(r.nombre || 'Anónimo') + '</div>' + cursoHtml + '</div>'
+        + '</div></div>';
+    }
+    cont.innerHTML = html;
+  }
+
+  async function enviarResena() {
     var nombre = document.getElementById('r-nombre');
     var texto = document.getElementById('r-texto');
     if (!nombre || !texto) return;
     if (!nombre.value.trim() || !texto.value.trim()) { alert('Por favor escribe tu nombre y tu experiencia.'); return; }
-    alert('Gracias por tu resena!');
+    if (!supabaseClient) { alert('No se pudo conectar con la base de datos.'); return; }
+
+    var btn = document.getElementById('btn-enviar-resena');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Enviando...'; }
+
+    var res = await supabaseClient.from('reseñas').insert([{
+      nombre: nombre.value.trim(),
+      comentario: texto.value.trim(),
+      puntuacion: starsVal,
+      curso: (document.getElementById('r-curso') ? document.getElementById('r-curso').value : '') || null
+    }]);
+
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Publicar mi reseña'; }
+
+    if (res.error) {
+      console.error('Error guardando resena:', res.error);
+      alert('Hubo un problema al enviar tu reseña. Intentalo de nuevo.');
+      return;
+    }
+
+    nombre.value = '';
+    texto.value = '';
+    var curso = document.getElementById('r-curso');
+    if (curso) curso.value = '';
+    setStars(5);
+    updatePreview();
+
+    var exito = document.getElementById('exito-msg');
+    if (exito) exito.style.display = 'block';
+
+    cargarResenas();
   }
 
   function enviarWhatsApp() {
@@ -2355,6 +2447,7 @@ ESCUELA   -->
 
   window.addEventListener('DOMContentLoaded', function() {
     setStars(5);
+    cargarResenas();
     var validPages = ['home','escuela','eventos','tienda','servicios','nosotros','resenas','miembros'];
     var path = window.location.pathname.replace('/', '').replace('.html', '');
     var hash = window.location.hash.replace('#','');
